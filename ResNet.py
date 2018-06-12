@@ -39,8 +39,8 @@ def residual_unit(data, num_filter, stride, dim_match, name, bottle_neck=True, b
         if dim_match:
             shortcut = data
         else:
-            shortcut = mx.sym.Convolution(data=act1, num_filter=num_filter, kernel=(1,1), stride=stride, no_bias=True,
-                                            workspace=workspace, name=name+'_sc')   #TODO: remove the hacky fix
+            shortcut = custom_conv(data=act1, num_filter=num_filter, kernel=(1,1), stride=stride, no_bias=True,
+                                            workspace=workspace, name=name+'_sc')
         if memonger:
             shortcut._set_attr(mirror_stage='True')
         return conv3 + shortcut
@@ -56,8 +56,8 @@ def residual_unit(data, num_filter, stride, dim_match, name, bottle_neck=True, b
         if dim_match:
             shortcut = data
         else:
-            shortcut = mx.sym.Convolution(data=act1, num_filter=num_filter, kernel=(1,1), stride=stride, no_bias=True,
-                                            workspace=workspace, name=name+'_sc')   #TODO: hacky!!!!!!!!!!!!!!!!!!!!
+            shortcut = custom_conv(data=act1, num_filter=num_filter, kernel=(1,1), stride=stride, no_bias=True,
+                                            workspace=workspace, name=name+'_sc')
         if memonger:
             shortcut._set_attr(mirror_stage='True')
         return conv2 + shortcut
@@ -84,10 +84,10 @@ def resnet(units, num_stage, filter_list, num_class, data_type, bottle_neck=True
     data = mx.sym.Variable(name='data')
     data = mx.sym.BatchNorm(data=data, fix_gamma=True, eps=2e-5, momentum=bn_mom, name='bn_data')
     if data_type == 'cifar10':
-        body = mx.sym.Convolution(data=data, num_filter=filter_list[0], kernel=(3, 3), stride=(1,1), pad=(1, 1),
+        body = custom_conv(data=data, num_filter=filter_list[0], kernel=(3, 3), stride=(1,1), pad=(1, 1),
                                   no_bias=True, name="conv0", workspace=workspace)
     elif data_type == 'imagenet':
-        body = mx.sym.Convolution(data=data, num_filter=filter_list[0], kernel=(7, 7), stride=(2,2), pad=(3, 3),
+        body = custom_conv(data=data, num_filter=filter_list[0], kernel=(7, 7), stride=(2,2), pad=(3, 3),
                                   no_bias=True, name="conv0", workspace=workspace)
         body = mx.sym.BatchNorm(data=body, fix_gamma=False, eps=2e-5, momentum=bn_mom, name='bn0')
         body = mx.sym.Activation(data=body, act_type='relu', name='relu0')

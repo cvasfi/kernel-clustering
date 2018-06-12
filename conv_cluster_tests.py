@@ -108,28 +108,23 @@ def get_channelwise_clustered(filters, shrink):
     return mx.nd.array(result)
 
 
-def get_score(in_sym,in_args,in_auxs, save=False):
+def get_score(in_sym,in_args,in_auxs, save=False, in_prefix=""):
     mod = mx.mod.Module(symbol=in_sym, context=mx.gpu())
     mod.bind(for_training=False, data_shapes=val_iter.provide_data, label_shapes=val_iter.provide_label)
     mod.set_params(in_args, in_auxs)
     if save:
-        mod.save_checkpoint(prefix+"_clustered8",epoch=0)
+        mod.save_checkpoint(in_prefix,epoch=0)
     return mod.score(val_iter, [mx.metric.Accuracy()])
 
-def naive_clusternet():
+def naive_clusternet(shrink):
     global first
     for l in sym.get_internals().list_outputs():
-        if "weight" in l and "conv" in l:
+        if "weight" in l and "fc" not in l:
             layers.append(l)
-            if 'conv0' in l:
-                first=args[l].shape[0]*args[l].shape[1]
-                print l
-                pass
-            else:
-                #args[l] = get_quantized(args[l], 8)
-                args[l] = get_channelwise_clustered(args[l], 2)
+            #args[l] = get_quantized(args[l], 8)
+            args[l] = get_channelwise_clustered(args[l], shrink)
 
-    print get_score(sym,args,auxs)
+    print get_score(sym,args,auxs, save=True, in_prefix=prefix+"_clustered_naive_"+str(shrink)+"x")
 
 
 def get_compress_rate(layer, big=8, default=4): #lookup tuned for resnet20
@@ -248,7 +243,7 @@ def global_clusternet(shrink=32):    #TODO: use a generalized cluster function
     fshapes=[]
 
     for l in sym.get_internals().list_outputs():
-        if "weight" in l and "conv" in l:
+        if "weight" in l and ( "conv" in l or "sc" in l):
             shape=args[l].shape
             filter=args[l].reshape((shape[0] * shape[1], shape[2] * shape[3]))
             filters.append(filter)
@@ -276,12 +271,16 @@ def global_clusternet(shrink=32):    #TODO: use a generalized cluster function
 
 print "Welcome!"
 print "Initial score: {}".format(get_score(sym,args,auxs))
-iterative_finetuned_clusternet(8)
+#iterative_finetuned_clusternet(8)
 #
 #get_speedup()
-#naive_clusternet()
+naive_clusternet(4)
 
-print "speedup is: {}".format(get_speedup())
+print layers
+
+print get_speedup()
+
+#print "speedup is: {}".format(get_speedup())
 #print(float(first+qsum)/(qsum/2+first))
 #
 ##print get_layer_sqr_error('bn_data_output','conv0_output','conv0_weight',24)

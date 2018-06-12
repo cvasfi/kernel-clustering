@@ -1,6 +1,10 @@
 import mxnet as mx
 import numpy as np
 from ResNet import resnet
+import time
+import copy
+import logging
+
 
 class converter(object):
 
@@ -8,21 +12,22 @@ class converter(object):
         self.layers = []
         self.network = {}
         self.in_sym, self.in_args, self.in_auxs = mx.mod.module.load_checkpoint(in_prefix, in_epoch)
-        self.prefix=prefix
+        self.prefix=in_prefix
+        self.epoch = in_epoch
         self.batch_size = batch_size
         self.shrink=shrink
 
         self.val_iter = mx.image.ImageIter(batch_size=batch_size, data_shape=(3, 32, 32), path_imgrec=data_path)
         self.input_shape = self.val_iter.provide_data[0][1]
-        self.codebook_args = self.in_args
+        self.codebook_args = copy.deepcopy(self.in_args)
 
         self.process_symbol()
 
 
-        #auglist = mx.image.CreateAugmenter((3, 32, 32), resize=0, rand_mirror=True, hue=0.3, brightness=0.4,
-        #                                   saturation=0.3, contrast=0.35, rand_crop=True, rand_gray=0.3)
-        #train_iter = mx.image.ImageIter(batch_size=batch_size, data_shape=(3, 32, 32),
-        #                                path_imgrec="dataset/cifar10_train.rec", aug_list=auglist)
+        auglist = mx.image.CreateAugmenter((3, 32, 32), resize=0, rand_mirror=True, hue=0.3, brightness=0.4,
+                                           saturation=0.3, contrast=0.35, rand_crop=True, rand_gray=0.3)
+        self.train_iter = mx.image.ImageIter(batch_size=batch_size, data_shape=(3, 32, 32),
+                                        path_imgrec="dataset/cifar10_train.rec", aug_list=auglist)
 
 
     def extract_cluster_centers(self, data):
@@ -50,9 +55,8 @@ class converter(object):
         in_args = self.in_args
 
         for element in in_sym.get_internals().list_outputs():
-            if "conv" in element and "weight" in element:  # maybe tune for different networks
-                if "conv0" in element:  # hack to exclude first layer
-                    continue
+            if "weight" in element and "fc" not in element:  # maybe tune for different networks
+
                 weight = in_args[element]
                 layer = element[:len(element) - 7]
 
@@ -70,51 +74,8 @@ class converter(object):
                 self.network[layer]["out_shape"] = lrshape[0]
         print "symbol processed, clusters extracted."
 
-    def convolve_codebook(self, data, name, num_filter, kernel=(3,3), stride=(1,1), pad=(1,1),
-                                      no_bias=True, workspace = None):
-        layer=self.network[name]
-        indices=layer["indices"]
-        codebookshape = layer["c_shape"]
-        output_shape = layer["out_shape"]
 
-        filters = mx.sym.Variable(name+"_weight", shape=codebookshape)
-        fshape = codebookshape  # 4,16,3,3
-        index_shape = indices.shape
-
-        filters = mx.sym.transpose(filters, axes=(1, 0, 2, 3)).reshape((-1, 1, 0, 0))  # TODO: transpose is unnecessary!!
-        res = mx.sym.Convolution(data=data, weight=filters, num_group=fshape[1], num_filter=fshape[0] * fshape[1],
-                                  kernel=kernel, stride=stride, pad=pad, no_bias=no_bias, workspace=workspace)
-        res = res.expand_dims(1)
-        res = res.reshape((0, fshape[1], fshape[0], 0, 0))
-        res = mx.sym.transpose(res, axes=(0, 2, 1, 3, 4))  # lookup table
-
-        # hacky because multi-dim indexing isn't allowed
-        res = mx.sym.reshape(data=res, shape=(-1, 0), reverse=1)  # (sample*nclusters*channel*W,H)
-        # now looking up the results
-
-        # print res[0,1,0] #7, 4, 16 ,30, 30
-        #print index_shape  # 7,4,16,30,30
-        lres = []
-        # TODO: find a way to implement with less loops
-        for sample in range(output_shape[0]):
-            filterwise_list = []
-            for fltr in range(index_shape[0]):
-                channelwise_list = []
-                for ch in range(index_shape[1]):
-                    ## (((sample*4+cluster)*channels)*channel)*width
-                    slice_begin = (int(((sample * fshape[0] + indices[fltr, ch]) * fshape[1] + ch) * output_shape[2]), 0)
-                    slice_end = (int(slice_begin[0] + output_shape[2]), int(output_shape[3]))
-
-                    # channelwise_list.append(res[sample][indices[fltr,ch]][ch][0])
-                    channelwise_list.append(mx.sym.slice(data=res, begin=slice_begin, end=slice_end))
-
-                filterwise_list.append(mx.sym.sum(mx.sym.stack(*channelwise_list), axis=0))
-            lres.append(mx.sym.stack(*filterwise_list))
-        lres = mx.sym.stack(*lres)
-
-        return lres
-
-    def convolve_codebook_light(self, data, name, num_filter = None, kernel=(3,3), stride=(1,1), pad=(1,1),
+    def convolve_codebook_light(self, data, name, num_filter = None, kernel=(3,3), stride=(1,1), pad=(0,0),
                                       no_bias=True, workspace = None):
         layer = self.network[name]
         fshape = layer["f_shape"]
@@ -125,9 +86,7 @@ class converter(object):
 
         filters = mx.sym.Variable(name+"_weight", shape=codebookshape)
         indices = mx.sym.Variable(name+"_indices", shape=indices_shape)
-        # fshape  = codebookshape #4,16,3,3
 
-        # filters = mx.sym.transpose(filters, axes=(1,0,2,3)).reshape((-1,1,0, 0)) #TODO: transpose is unnecessary!!
         res = mx.sym.Convolution(data=data, weight=filters, num_group=fshape[1], num_filter=fshape[0] * fshape[1], stride = stride,
                                  no_bias=no_bias, kernel=kernel, workspace =workspace, pad=pad, name=name)
         res = res.reshape((0, 0, -1))  # flatten the image for matmul lookup
@@ -137,7 +96,6 @@ class converter(object):
         res = res.reshape((0, 0, output_shape[2], output_shape[3]),name=name+"_reshape")
 
         return res
-
 
     def convert(self):
         depth = 20
@@ -149,23 +107,60 @@ class converter(object):
                      bottle_neck=bottle_neck, custom_conv=self.convolve_codebook_light)
 
     def get_score(self,symbol_input, in_args, in_auxs):
-        mod = mx.mod.Module(symbol=symbol_input, context=mx.gpu())
+        mod = mx.mod.Module(symbol=symbol_input, context=mx.cpu())
         mod.bind(for_training=False, data_shapes=self.val_iter.provide_data, label_shapes=self.val_iter.provide_label)
         mod.set_params(in_args, in_auxs)
-        return mod.score(self.val_iter, ['acc'])
+        begin = time.time()
 
-    def predict_converted(self):
+        score= mod.score(self.val_iter, ['acc'])
+
+        duration = time.time() - begin
+        return score, duration
+
+    def evaluate_converted(self):
         return self.get_score(self.converted_sym, self.codebook_args, self.in_auxs)
 
-    #def compare_baseline(self):
+    def compare_baseline(self):
+        score1, time1 = self.get_score(self.in_sym,self.in_args,self.in_auxs)
+        score2, time2 = self.evaluate_converted()
+
+        print "\nOriginal network score: {}, time to complete: {}".format(score1,time1)
+        print "\nClustered network score: {}, time to complete: {}".format(score2,time2)
+        print ("\nCompressed {}x, Speedup: {}".format(self.shrink,float(time1)/time2))
+
+
+    def finetune_codebooks(self):
+        logging.getLogger().setLevel(logging.DEBUG)
+
+        mod = mx.mod.Module(symbol=self.converted_sym, context=mx.gpu())
+        optimizer_params = {'learning_rate': 0.0001,
+                            'momentum': 0.9,
+                            'wd': 0.0005,
+                            'clip_gradient': None,
+                            'rescale_grad': 1.0}
+        epoch=self.epoch
+        mod.fit(self.train_iter,
+                eval_data=self.val_iter,
+                optimizer='sgd',
+                optimizer_params=optimizer_params,
+                eval_metric='acc',
+                batch_end_callback=mx.callback.Speedometer(self.batch_size, 150),
+                epoch_end_callback=mx.callback.do_checkpoint(prefix+"_finetuned"),
+                arg_params=self.codebook_args,
+                aux_params=self.in_auxs,
+                begin_epoch=epoch + 1,
+                num_epoch=epoch + 51
+                )
 
 
 #
-prefix="cnn_models/resnet20_clustered"
-epoch=0
-cv = converter(prefix, epoch, batch_size=8, shrink=4)
+prefix="cnn_models/naive4x/resnet20_clustered_naive_4x_finetuned"
+epoch=5
+cv = converter(prefix, epoch, batch_size=32, shrink=4)
 cv.convert()
-print cv.predict_converted()
+#print cv.compare_baseline()
+#
+cv.finetune_codebooks()
 
 #for k in cv.in_args:
 #    print k
