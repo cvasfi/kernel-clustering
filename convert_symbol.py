@@ -11,6 +11,7 @@ class converter(object):
     def __init__(self, in_prefix,in_epoch, batch_size, data_path = "dataset/cifar10_val.rec", shrink = 8):
         self.layers = []
         self.network = {}
+        self.frozen_params=[]
         self.in_sym, self.in_args, self.in_auxs = mx.mod.module.load_checkpoint(in_prefix, in_epoch)
         self.prefix=in_prefix
         self.epoch = in_epoch
@@ -68,6 +69,7 @@ class converter(object):
                 self.network[layer] = {}
                 self.codebook_args[layer+"_weight"] = mx.nd.array(codebook_flattened)
                 self.codebook_args[layer + "_indices"] = onehot_indices
+                self.frozen_params.append(layer + "_indices")
                 self.network[layer]["f_shape"] = codebook_filter.shape
                 self.network[layer]["c_shape"] = codebook_flattened.shape
                 self.network[layer]["i_shape"] = onehot_indices.shape
@@ -132,8 +134,8 @@ class converter(object):
     def finetune_codebooks(self):
         logging.getLogger().setLevel(logging.DEBUG)
 
-        mod = mx.mod.Module(symbol=self.converted_sym, context=mx.gpu())
-        optimizer_params = {'learning_rate': 0.0001,
+        mod = mx.mod.Module(symbol=self.converted_sym, context=mx.gpu(),fixed_param_names=self.frozen_params)
+        optimizer_params = {'learning_rate': 0.00005,
                             'momentum': 0.9,
                             'wd': 0.0005,
                             'clip_gradient': None,
@@ -152,15 +154,46 @@ class converter(object):
                 num_epoch=epoch + 51
                 )
 
+def train(in_prefix, in_epoch):
+    logging.getLogger().setLevel(logging.DEBUG)
+
+    auglist = mx.image.CreateAugmenter((3, 32, 32), resize=0, rand_mirror=True, hue=0.3, brightness=0.4,
+                                       saturation=0.3, contrast=0.35, rand_crop=True, rand_gray=0.3)
+    batch_size = 32
+    train_iter = mx.image.ImageIter(batch_size=batch_size, data_shape=(3, 32, 32),
+                                         path_imgrec="dataset/cifar10_train.rec", aug_list=auglist)
+    val_iter = mx.image.ImageIter(batch_size=batch_size, data_shape=(3, 32, 32), path_imgrec="dataset/cifar10_val.rec")
+
+    sym, args, auxs = mx.mod.module.load_checkpoint(in_prefix, in_epoch)
+
+    mod = mx.mod.Module(symbol=sym, context=mx.gpu())
+    optimizer_params = {'learning_rate': 0.0001,
+                        'momentum': 0.9,
+                        'wd': 0.0005,
+                        'clip_gradient': None,
+                        'rescale_grad': 1.0}
+    epoch = in_epoch
+    mod.fit(train_iter,
+            eval_data=val_iter,
+            optimizer='sgd',
+            optimizer_params=optimizer_params,
+            eval_metric='acc',
+            batch_end_callback=mx.callback.Speedometer(batch_size, 150),
+            epoch_end_callback=mx.callback.do_checkpoint(prefix),
+            arg_params=args,
+            aux_params=auxs,
+            begin_epoch=epoch + 1,
+            num_epoch=epoch + 51
+            )
 
 #
-prefix="cnn_models/naive4x/resnet20_clustered_naive_4x_finetuned"
-epoch=5
-cv = converter(prefix, epoch, batch_size=32, shrink=4)
-cv.convert()
-#print cv.compare_baseline()
-#
-cv.finetune_codebooks()
+prefix="cnn_models/naive8x/resnet20_clustered_naive_8x_finetuned"
+epoch=6
+#cv = converter(prefix, epoch, batch_size=32, shrink=8)
+#cv.convert()
+##print cv.compare_baseline()
+##
+#cv.finetune_codebooks()
 
 #for k in cv.in_args:
 #    print k
@@ -169,3 +202,5 @@ cv.finetune_codebooks()
 #
 #for k in cv.codebook_args:
 #    print k
+
+train(prefix,epoch)
