@@ -36,18 +36,32 @@ class clusternet(object):
 
 
 
-    def get_quantized_filters(self, filters, shrink):
+    def get_quantized_filters(self, filters, shrink, groups= 1):
+
         shape = filters.shape
-        n_clusters = shape[0] / shrink
+        chunksize = shape[0] / groups
+        n_clusters_total = shape[0] / shrink
+
 
         filters_shaped = filters.reshape((shape[0], shape[1] * shape[2] * shape[3])).data.numpy()
-        estimator = KMeans(n_clusters=n_clusters)
-        estimator.fit(filters_shaped)
 
-        filter_kmean_indexes = estimator.predict(X=filters_shaped)
-        filters_quantized = np.array([estimator.cluster_centers_[idx] for idx in filter_kmean_indexes])
+        indices=[]
+        codebooks=[]
 
-        return torch.LongTensor(filter_kmean_indexes), torch.Tensor(estimator.cluster_centers_).reshape(n_clusters,shape[1],shape[2],shape[3]), torch.Tensor(filters_quantized).reshape(shape)
+        for group_idx in range(groups):
+            filter_group_idx = group_idx*chunksize
+            filter_group=filters_shaped[filter_group_idx:filter_group_idx+chunksize]
+
+            n_clusters = filter_group.shape[0] / shrink
+
+            estimator = KMeans(n_clusters=n_clusters)
+            estimator.fit(filter_group)
+
+            indices.append(estimator.predict(X=filter_group) + group_idx*n_clusters)
+            codebooks.append(estimator.cluster_centers_)
+
+
+        return torch.LongTensor(np.concatenate(indices)), torch.Tensor(np.concatenate(codebooks)).reshape(n_clusters_total,shape[1],shape[2],shape[3])
 
 
     def quantize_all_params(self, debug=False):
@@ -58,14 +72,14 @@ class clusternet(object):
         for k in in_params:
             if "weight" in k and "features" in k:
                 filters = in_params[k]
-                indices, codebook, q_filters = self.get_quantized_filters(filters, self.shrink)
+                indices, codebook = self.get_quantized_filters(filters, self.shrink)
 
                 indices_list.append(indices)
                 codebooks.append(codebook)
 
-                if debug:
-                    in_params[k].data.copy_(q_filters)
-                    assert torch.equal(in_params[k], q_filters)
+                #if debug:
+                #    in_params[k].data.copy_(q_filters)
+                #    assert torch.equal(in_params[k], q_filters)
 
         return indices_list, codebooks
 
@@ -73,14 +87,14 @@ class clusternet(object):
     def forward_pass(self, net, data):
         return net(data)
 
-    def sanity_test1(self):
-        res1=self.forward_pass(self.in_net, self.imagenet_dummy)
-        self.quantize_all_params(debug=True)
-
-        res2=self.forward_pass(self.in_net, self.imagenet_dummy)
-        err = torch.mean((res1 - res2) ** 2)
-
-        print err.data.numpy()
+    #def sanity_test1(self):
+    #    res1=self.forward_pass(self.in_net, self.imagenet_dummy)
+    #    self.quantize_all_params(debug=True)
+#
+    #    res2=self.forward_pass(self.in_net, self.imagenet_dummy)
+    #    err = torch.mean((res1 - res2) ** 2)
+#
+    #    print err.data.numpy()
 
 
     def sanity_test2(self):
