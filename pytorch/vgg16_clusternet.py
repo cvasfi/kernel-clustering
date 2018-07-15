@@ -11,9 +11,10 @@ import vgg16
 from vgg16 import VGG
 
 class vgg16_clusternet(clusternet):
-    def __init__(self, shrink=2):
+    def __init__(self, weights, shrink=2):
         self.cfg        = [64, 64, 'M', 128, 128, 'M', 256, 256, 256, 'M', 512, 512, 512, 'M', 512, 512, 512, 'M']
         self.in_net     = VGG(vgg16.make_layers(self.cfg))
+        self.in_net.load_state_dict(torch.load(weights))
         self.in_params  = self.in_net.state_dict()
         self.shrink     = shrink
         self.imagenet_dummy=torch.rand(8,3,224,224)
@@ -40,6 +41,7 @@ class vgg16_clusternet(clusternet):
 
 
 
-cn=vgg16_clusternet(shrink=4)
+
+cn=vgg16_clusternet(weights="/home/tapir/Documents/Thesis/vgg16_pytoarch_weights/vgg16-397923af.pth", shrink=4)
 
 cn.sanity_test2()

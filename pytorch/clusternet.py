@@ -8,17 +8,28 @@ import math
 from sklearn.cluster import KMeans
 import time
 import gc
+import Imagenet
+import torch.utils.data
+import torchvision.transforms as transforms
+import torchvision.datasets as datasets
+
+
 class clusternet(object):
-    def __init__(self, shrink=2):
+    def __init__(self, train_dir, val_dir, shrink=2):
         self.in_net     = AlexNet.AlexNet()
         self.in_params  = self.in_net.state_dict()
         self.shrink     = shrink
         self.imagenet_dummy=torch.rand(64,3,224,224)
 
+        self.train_path=train_dir
+        self.val_path=val_dir
+        self.batch_size=32
 
 
+    def evaluate(self, evaldir):
 
-
+        valloader = Imagenet.load_imagenet(evaldir, 2)
+        print Imagenet.validate(valloader, self.in_net, nn.CrossEntropyLoss())
 
     def convert_network(self):
         grouped_layers = set(['4', '10', '12'])
@@ -111,6 +122,8 @@ class clusternet(object):
         err = np.mean(np.square(res1-res2))
 
         print "speedup is {}, mean err is {}".format(float(time1)/time2, err)
+
+
 
 
 #cn=clusternet(shrink=4)
