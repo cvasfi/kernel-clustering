@@ -26,10 +26,13 @@ class clusternet(object):
         self.batch_size=32
 
 
-    def evaluate(self, evaldir):
+    def evaluate(self, evaldir, batch_size, quantized=False):
 
-        valloader = Imagenet.load_imagenet(evaldir, 2)
-        print Imagenet.validate(valloader, self.in_net, nn.CrossEntropyLoss())
+        net = self.convert_network() if quantized else self.in_net
+
+        valloader = Imagenet.load_imagenet(evaldir, batch_size)
+        print Imagenet.validate(valloader, net, nn.CrossEntropyLoss())
+
 
     def convert_network(self):
         grouped_layers = set(['4', '10', '12'])
