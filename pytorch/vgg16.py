@@ -72,7 +72,7 @@ def make_layers_lookup(cfg, indices, shrink):
         if v == 'M':
             layers += [nn.MaxPool2d(kernel_size=2, stride=2)]
         else:
-            conv2d = LookupConv(next(indices), in_channels, v, kernel_size=3, padding=1)
+            conv2d = LookupConv(next(indices).cuda(), in_channels, v, kernel_size=3, padding=1)
             layers += [conv2d, nn.ReLU(inplace=True)]
             in_channels = v * shrink
     return nn.Sequential(*layers)

@@ -33,6 +33,48 @@ class clusternet(object):
         valloader = Imagenet.load_imagenet(evaldir, batch_size)
         print Imagenet.validate(valloader, net, nn.CrossEntropyLoss())
 
+    def train(self, traindir, valdir, batch_size, save_prefix):
+        net = self.convert_network().cuda()
+        train_loader = Imagenet.load_imagenet(traindir, batch_size, train=True)
+        val_loader = Imagenet.load_imagenet(valdir, batch_size)
+
+        lr=0.1
+        mom=0.9
+        wd = 1e-4
+
+        start_epoch=0
+        epochs=3
+
+        criterion = nn.CrossEntropyLoss().cuda()
+
+        optimizer = torch.optim.SGD(net.parameters(), lr,
+                                    momentum=mom,
+                                    weight_decay=wd)
+
+
+        for epoch in range(start_epoch, epochs):
+
+            Imagenet.adjust_learning_rate(lr, optimizer, epoch)
+
+            # train for one epoch
+            Imagenet.train(train_loader, net, criterion, optimizer, epoch)
+
+            # evaluate on validation set
+            prec1 = Imagenet.validate(val_loader, net, criterion)
+
+            # remember best prec@1 and save checkpoint
+            is_best = prec1 > best_prec1
+            best_prec1 = max(prec1, best_prec1)
+            Imagenet.save_checkpoint({
+                'epoch': epoch + 1,
+                'arch': save_prefix,
+                'state_dict': net.state_dict(),
+                'best_prec1': best_prec1,
+                'optimizer': optimizer.state_dict(),
+            }, is_best)
+
+
+
 
     def convert_network(self):
         grouped_layers = set(['4', '10', '12'])
