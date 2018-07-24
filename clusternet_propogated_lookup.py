@@ -20,8 +20,7 @@ class ClusterNet(object):
         self.network = {}
         self.frozen_params=[]
         self.in_sym, self.in_args, self.in_auxs = mx.mod.module.load_checkpoint(in_prefix, in_epoch)
-        if arch=="vgg":
-            self.in_sym=vgg.get_symbol(1000, 16)
+
 
         for k in self.in_args:
             if "weight" in k:
@@ -61,6 +60,8 @@ class ClusterNet(object):
 
 
         if process:
+            if arch == "vgg":
+                self.in_sym = vgg.get_symbol(1000, 16)
             self.sym, self.args = self.convert_network(self.in_sym, self.in_args, self.shrink)
             self.save_prefix=in_prefix+"_finetuned"
         else:
