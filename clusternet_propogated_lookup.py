@@ -15,7 +15,7 @@ import numpy as np
 
 
 class ClusterNet(object):
-    def __init__(self, in_prefix, in_epoch, batch_size, process=True, shrink = 8, dataset="cifar10", traindir=None, valdir=None, arch='resnet'):
+    def __init__(self, in_prefix, in_epoch, batch_size, process=True, shrink = 8, dataset="cifar10", traindir=None, valdir=None, arch='resnet', lr = 0.00001):
         self.layers = []
         self.network = {}
         self.frozen_params=[]
@@ -31,6 +31,7 @@ class ClusterNet(object):
         self.arch=arch
         self.shrink= shrink
         self.batch_size=batch_size
+        self.lr = lr
         if dataset=='cifar10':
             self.val_iter = mx.image.ImageIter(batch_size=batch_size, data_shape=(3, 32, 32), path_imgrec="dataset/cifar10_train.rec")
             auglist = mx.image.CreateAugmenter((3, 32, 32), resize=0, rand_mirror=True, hue=0.3, brightness=0.4,
@@ -40,8 +41,8 @@ class ClusterNet(object):
         else:
             #self.val_iter = mx.io.ImageRecordIter(path_imgrec=imagenetpath, data_name="data", label_name="softmax_label",
             #    batch_size=batch_size, data_shape=(3, 224, 224))
-            auglist = mx.image.CreateAugmenter((3, 224, 224), resize=0, rand_mirror=True, hue=0.2, brightness=0.2,
-                                               saturation=0.2, contrast=0.2, rand_crop=True, rand_gray=0.2)
+            auglist = mx.image.CreateAugmenter((3, 224, 224), resize=0, rand_mirror=True, hue=0.3, brightness=0.3,
+                                               saturation=0.3, contrast=0.3, rand_crop=True, rand_gray=0.3,rand_resize= True)
             self.train_iter = mx.image.ImageIter(batch_size=batch_size, data_shape=(3, 224, 224),
                                             path_imgrec=traindir, aug_list=auglist)
 
@@ -192,7 +193,7 @@ class ClusterNet(object):
         logging.getLogger().setLevel(logging.DEBUG)
         print"Finetuning codebook, frozen parameters: {}".format(self.frozen_params)
         mod = mx.mod.Module(symbol=self.sym, context=mx.gpu(),fixed_param_names=self.frozen_params)
-        optimizer_params = {'learning_rate': 0.00001,
+        optimizer_params = {'learning_rate': self.lr,
                             'momentum': 0.9,
                             'wd': 0.0005,
                             'clip_gradient': None,

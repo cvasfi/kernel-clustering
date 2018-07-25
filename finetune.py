@@ -14,10 +14,11 @@ parser.add_argument('--prefix', default="/mnt/data/vgg/vgg16", type=str,help='va
 parser.add_argument('--epoch', default="0", type=int,help='val folder')
 parser.add_argument('--batch_size', default="1", type=int,help='val folder')
 parser.add_argument('--shrink', default="2", type=int,help='val folder')
+parser.add_argument('--lr', default="0.00001", type=float,help='val folder')
 
 
 args = parser.parse_args()
 
 
-cl = ClusterNet(args.prefix, args.epoch, args.batch_size, process=False, shrink = args.shrink, dataset="imagenet", traindir=args.trainrec, valdir=args.valrec, arch='vgg')
+cl = ClusterNet(args.prefix, args.epoch, args.batch_size, process=False, shrink = args.shrink, dataset="imagenet", traindir=args.trainrec, valdir=args.valrec, arch='vgg', lr=args.lr)
 cl.finetune_codebooks()
