@@ -13,6 +13,7 @@ parser.add_argument('--valrec', default="/mnt/data/dataset_stuff/imagenetval/ima
 parser.add_argument('--prefix', default="/mnt/data/vgg/vgg16", type=str,help='val folder')
 parser.add_argument('--epoch', default="0", type=int,help='val folder')
 parser.add_argument('--batch_size', default="1", type=int,help='val folder')
+parser.add_argument('--lr', default="0.00001", type=float,help='val folder')
 
 
 args = parser.parse_args()
@@ -50,5 +51,5 @@ imagenetpath="/mnt/data/dataset_stuff/imagenetval/imagenet1k-val.rec"
 prefix="/mnt/data/vgg/vgg16"
 epoch=0
 
-cl = ClusterNet(args.prefix, args.epoch, args.batch_size, process=True, shrink = 2, dataset="imagenet", traindir=args.trainrec, valdir=args.valrec, arch='vgg')
+cl = ClusterNet(args.prefix, args.epoch, args.batch_size, process=True, shrink = 2, dataset="imagenet", traindir=args.trainrec, valdir=args.valrec, arch='vgg', lr= args.lr)
 cl.finetune_codebooks()
