@@ -41,10 +41,12 @@ class ClusterNet(object):
         else:
             #self.val_iter = mx.io.ImageRecordIter(path_imgrec=imagenetpath, data_name="data", label_name="softmax_label",
             #    batch_size=batch_size, data_shape=(3, 224, 224))
-            auglist = mx.image.CreateAugmenter((3, 224, 224), resize=0, rand_mirror=True, hue=0.3, brightness=0.3,
-                                               saturation=0.3, contrast=0.3, rand_crop=True, rand_gray=0.3,rand_resize= True)
+            auglist = mx.image.CreateAugmenter((3, 224, 224), resize=0, rand_mirror=True, hue=0.4, brightness=0.4,
+                                               saturation=0.4, contrast=0.4, rand_crop=True, rand_gray=0.4,rand_resize= True, pca_noise=0.2)
+            auglist=mx.image.RandomOrderAug(auglist)
+
             self.train_iter = mx.image.ImageIter(batch_size=batch_size, data_shape=(3, 224, 224),
-                                            path_imgrec=traindir, aug_list=auglist)
+                                            path_imgrec=traindir, aug_list=auglist, shuffle=True)
 
             self.val_iter = mx.io.ImageRecordIter(path_imgrec=valdir, data_name="data", label_name="softmax_label",
                 batch_size=batch_size, data_shape=(3, 224, 224))
