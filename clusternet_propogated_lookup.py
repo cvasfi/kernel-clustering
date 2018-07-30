@@ -6,7 +6,6 @@ import copy
 import logging
 from sklearn.cluster import KMeans
 import vgg
-import AlexNet
 import gc
 
 import time
